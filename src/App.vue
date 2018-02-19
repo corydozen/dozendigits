@@ -1,34 +1,90 @@
 <template>
   <div id="app">
-    <div class="container">
-      <div class="number-container">
-        <div class="number">{{ firstNumber }}</div>
+    <div class="difficulty-container">
+      <div class="difficulty">
+        <button class="btn" :class="{'btn-primary': difficulty=='low'}" @click.prevent="changeDifficulty('low')">Easy</button>
+        <button class="btn" :class="{'btn-primary': difficulty=='medium'}" @click.prevent="changeDifficulty('medium')">Medium</button>
+        <button class="btn" :class="{'btn-primary': difficulty=='high'}" @click.prevent="changeDifficulty('high')">Hard</button>
       </div>
-      <div class="number-container">
-        <div class="times-sign">&times;</div>
-        <div class="number">{{ secondNumber }}</div>
-        <div class="bottom-line"></div>
+    </div>
+    <div class="number-container">
+      <div class="number">{{ firstNumber }}</div>
+    </div>
+    <div class="number-container">
+      <div class="times-sign">&times;</div>
+      <div class="number">{{ secondNumber }}</div>
+      <div class="bottom-line"></div>
+    </div>
+    <div class="answer-container">
+      <div class="answer">
+        <input type="number" class="form-control" v-model="answer" @keyup.13="sendAnswer">
       </div>
-      <div class="answer-container">
-        <div class="answer">
-          <input type="number" class="form-control" v-model="answer">
-        </div>
-        <div class="submit-container">
-          <button class="btn btn-lg btn-primary" @click="answer">Answer</button>
-        </div>
+      <div class="submit-container">
+        <button class="btn btn-lg btn-primary" @click="sendAnswer">Answer</button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
+import axios from 'axios';
+import uuid from 'uuid';
+import { baseurl } from '../config.js';
+
 export default {
   name: 'app',
   data () {
     return {
-      firstNumber: 12,
-      secondNumber: 8,
-      answer: null
+      firstNumber: null,
+      secondNumber: null,
+      answer: null,
+      userId: null,
+      username: null,
+      difficulty: 'low'
+    }
+  },
+  mounted() {
+    this.getQuestion();
+  },
+  methods: {
+    getQuestion() {
+      var self = this;
+      axios.get(baseurl + '/answer?difficulty=' + this.difficulty)
+        .then(({data}) => {
+          self.firstNumber = data.first_number;
+          self.secondNumber = data.second_number;
+        });
+    },
+    answerKeyDown(e) {
+      console.log(e);
+    },
+    sendAnswer() {
+      var payload = {
+        first_number: this.firstNumber,
+        second_number: this.secondNumber,
+        answer: this.answer,
+        difficulty: this.difficulty,
+        user_id: this.userId,
+        username: this.username
+      }
+      var self = this;
+      axios.post(baseurl + '/answer', payload)
+        .then(({data}) => {
+          if (data.correct) {
+            alert('yay!');
+            self.firstNumber = data.next_question.first_number;
+            self.secondNumber = data.next_question.second_number;
+            self.answer = null;
+          } else {
+            alert('nope!');
+          }
+        });
+    },
+    changeDifficulty(d) {
+      this.difficulty = d;
+      this.first_number = null;
+      this.second_number = null;
+      this.getQuestion();
     }
   }
 }

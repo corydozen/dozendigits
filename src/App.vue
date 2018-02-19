@@ -7,20 +7,24 @@
         <button class="btn" :class="{'btn-primary': difficulty=='high'}" @click.prevent="changeDifficulty('high')">Hard</button>
       </div>
     </div>
-    <div class="number-container">
+    <div class="number-container" v-if="!loading">
       <div class="number">{{ firstNumber }}</div>
     </div>
-    <div class="number-container">
+    <div class="number-container" v-if="!loading">
       <div class="times-sign">&times;</div>
       <div class="number">{{ secondNumber }}</div>
       <div class="bottom-line"></div>
     </div>
-    <div class="answer-container">
+    <div class="answer-container" v-if="!loading">
       <div class="answer">
         <input type="number" class="form-control" v-model="answer" @keyup.13="sendAnswer">
       </div>
       <div class="submit-container">
-        <button class="btn btn-lg btn-primary" @click="sendAnswer">Answer</button>
+        <button class="btn btn-lg btn-primary" @click="sendAnswer" :disabled="checking">{{ checking ? 'Checking...' : 'Answer' }}</button>
+      </div>
+      <div class="alert-container">
+        <div class="alert alert-success" v-if="alert.status == 'correct'">Correct!</div>
+        <div class="alert alert-danger" v-if="alert.status == 'incorrect'">Incorrect</div>
       </div>
     </div>
   </div>
@@ -35,12 +39,19 @@ export default {
   name: 'app',
   data () {
     return {
+      loading: true,
       firstNumber: null,
       secondNumber: null,
       answer: null,
       userId: null,
       username: null,
-      difficulty: 'low'
+      difficulty: 'low',
+      alert: {
+        id: null,
+        status: null
+      },
+      alert_id: 0,
+      checking: false
     }
   },
   mounted() {
@@ -53,6 +64,7 @@ export default {
         .then(({data}) => {
           self.firstNumber = data.first_number;
           self.secondNumber = data.second_number;
+          self.loading = false;
         });
     },
     answerKeyDown(e) {
@@ -68,16 +80,26 @@ export default {
         username: this.username
       }
       var self = this;
+      this.checking = true;
       axios.post(baseurl + '/answer', payload)
         .then(({data}) => {
+          this.checking = false;
+          var alert_id = self.alert_id++;
+          self.alert.id = alert_id;
           if (data.correct) {
-            alert('yay!');
+            self.alert.status = 'correct';
             self.firstNumber = data.next_question.first_number;
             self.secondNumber = data.next_question.second_number;
             self.answer = null;
           } else {
-            alert('nope!');
+            self.alert.status = 'incorrect';
           }
+          setTimeout(() => {
+            if (self.alert.id === alert_id) {
+              self.alert.id = null;
+              self.alert.status = null;
+            }
+          }, 1500);
         });
     },
     changeDifficulty(d) {
@@ -156,6 +178,13 @@ export default {
 
 .submit-container {
   margin-top: 10px;
+}
+
+.alert-container {
+  margin-top: 10px;
+  width: 200px;
+  left: calc(50% - 100px);
+  position: relative;
 }
 
 </style>

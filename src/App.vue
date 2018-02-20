@@ -30,7 +30,7 @@
     </div>
     <div class="answer-container" v-if="!loading">
       <div class="answer">
-        <input type="number" class="form-control" v-model="answer" @keyup.13="sendAnswer" :disabled="checking">
+        <input id="answer" type="number" class="form-control" v-model="answer" @keyup.13="sendAnswer" :disabled="checking">
       </div>
       <div class="submit-container">
         <button class="btn btn-lg btn-primary" @click="sendAnswer" :disabled="checking">{{ checking ? 'Checking...' : 'Answer' }}</button>
@@ -47,6 +47,7 @@
 import axios from 'axios';
 import uuid from 'uuid';
 import { baseurl } from '../config.js';
+import Vue from 'vue';
 
 export default {
   name: 'app',
@@ -118,6 +119,9 @@ export default {
               self.alert.status = 'incorrect';
               self.answer = null;
             }
+            Vue.nextTick(() => {
+              document.getElementById("answer").focus();
+            });
             setTimeout(() => {
               if (self.alert.id === alert_id) {
                 self.alert.id = null;

@@ -111,7 +111,7 @@
                     "Fn::GetAtt": [ "LambdaCopyToS3", "Arn" ]
                 },
                 "source_bucket": "dozendigits",
-                "destination_bucket": {"Ref": "BucketNameParameter" },
+                "destination_bucket": { "Ref": "BucketNameParameter" },
                 "keys": ["error.html", "index.html", "dist/build.js", "dist/build.js.map"]
             }
         }

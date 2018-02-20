@@ -1,5 +1,18 @@
 <template>
   <div id="app">
+    <div class="container">
+      <div class="history-container">
+        <div class="row" v-for="guess in history">
+          <div class="col-12 alert" :class="{'alert-success': guess.correct, 'alert-danger': !guess.correct}">
+            <span class="glyphicon glyphicon-ok-circle" aria-hidden="true" v-if="guess.correct"></span>
+            <span class="glyphicon glyphicon-remove-circle" aria-hidden="true" v-if="!guess.correct"></span>
+            <span>{{ guess.first_number + ' * ' + guess.second_number + ' = ' }}</span>
+            <span :class="{'strikethrough': !guess.correct}">{{ guess.answer }}</span>
+            <span v-if=!guess.correct>{{ parseInt(guess.first_number) * parseInt(guess.second_number) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="difficulty-container">
       <div class="difficulty">
         <button class="btn" :class="{'btn-primary': difficulty=='low'}" @click.prevent="changeDifficulty('low')">Easy</button>
@@ -17,7 +30,7 @@
     </div>
     <div class="answer-container" v-if="!loading">
       <div class="answer">
-        <input type="number" class="form-control" v-model="answer" @keyup.13="sendAnswer">
+        <input type="number" class="form-control" v-model="answer" @keyup.13="sendAnswer" :disabled="checking">
       </div>
       <div class="submit-container">
         <button class="btn btn-lg btn-primary" @click="sendAnswer" :disabled="checking">{{ checking ? 'Checking...' : 'Answer' }}</button>
@@ -43,19 +56,27 @@ export default {
       firstNumber: null,
       secondNumber: null,
       answer: null,
-      userId: null,
-      username: null,
+      userid: 1234,
+      username: 1234,
       difficulty: 'low',
       alert: {
         id: null,
         status: null
       },
       alert_id: 0,
-      checking: false
+      checking: false,
+      history: []
     }
   },
   mounted() {
+    if(localStorage.getItem('userid')){
+      this.userid = localStorage.getItem('userid');
+    } else {
+      this.userid = uuid.v4();
+      localStorage.setItem('userid', this.userid);
+    }
     this.getQuestion();
+    this.getHistory();
   },
   methods: {
     getQuestion() {
@@ -71,36 +92,47 @@ export default {
       console.log(e);
     },
     sendAnswer() {
-      var payload = {
-        first_number: this.firstNumber,
-        second_number: this.secondNumber,
-        answer: this.answer,
-        difficulty: this.difficulty,
-        user_id: this.userId,
-        username: this.username
-      }
-      var self = this;
-      this.checking = true;
-      axios.post(baseurl + '/answer', payload)
-        .then(({data}) => {
-          this.checking = false;
-          var alert_id = self.alert_id++;
-          self.alert.id = alert_id;
-          if (data.correct) {
-            self.alert.status = 'correct';
-            self.firstNumber = data.next_question.first_number;
-            self.secondNumber = data.next_question.second_number;
-            self.answer = null;
-          } else {
-            self.alert.status = 'incorrect';
-          }
-          setTimeout(() => {
-            if (self.alert.id === alert_id) {
-              self.alert.id = null;
-              self.alert.status = null;
+      if (!this.checking) {
+        var payload = {
+          first_number: this.firstNumber,
+          second_number: this.secondNumber,
+          answer: this.answer,
+          difficulty: this.difficulty,
+          user_id: this.userid,
+          username: this.username
+        }
+        var self = this;
+        // this.checking = true;
+        axios.post(baseurl + '/answer', payload)
+          .then(({data}) => {
+            this.checking = false;
+            var alert_id = self.alert_id++;
+            self.alert.id = alert_id;
+            if (data.correct) {
+              self.alert.status = 'correct';
+              self.firstNumber = data.next_question.first_number;
+              self.secondNumber = data.next_question.second_number;
+              self.answer = null;
+              self.getHistory();
+            } else {
+              self.alert.status = 'incorrect';
+              self.answer = null;
             }
-          }, 1500);
-        });
+            setTimeout(() => {
+              if (self.alert.id === alert_id) {
+                self.alert.id = null;
+                self.alert.status = null;
+              }
+            }, 1500);
+          });
+      }
+    },
+    getHistory() {
+      var self = this;
+      axios.get(baseurl + '/history?userid=' + this.userid)
+        .then(({data}) => {
+          self.history = data;
+        })
     },
     changeDifficulty(d) {
       this.difficulty = d;
@@ -113,6 +145,15 @@ export default {
 </script>
 
 <style lang="scss">
+.history-container {
+  position: absolute;
+  .alert {
+    text-align: left;
+  }
+}
+.strikethrough {
+  text-decoration: line-through;
+}
 #app {
   font-family: 'Avenir', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;

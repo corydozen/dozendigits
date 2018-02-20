@@ -1,0 +1,125 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Parameters": {
+        "BucketNameParameter": {
+            "Type": "String",
+            "Default": "testbucket",
+            "Description": "Enter the name for your bucket. If it is not available, the Template will fail"
+        }
+    },
+    "Resources": {
+        "RoleLambdaS3": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{ "Effect": "Allow", "Principal": {"Service": ["lambda.amazonaws.com"]}, "Action": ["sts:AssumeRole"] }]
+                },
+                "Path": "/",
+                "Policies": [{
+                    "PolicyName": "root",
+                    "PolicyDocument": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": "s3:*",
+                                "Resource": "*"
+                            }
+                        ]
+                    }
+                }]
+            }
+        },
+        "S3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketName": {"Ref": "BucketNameParameter" },
+                "AccessControl": "PublicRead",
+                "WebsiteConfiguration": {
+                    "IndexDocument":"index.html",
+                    "ErrorDocument":"error.html"
+                }
+            }
+        },
+        "BucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Id": "MyPolicy",
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": "PublicReadForGetBucketObjects",
+                            "Effect": "Allow",
+                            "Principal": "*",
+                            "Action": "s3:GetObject",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:aws:s3:::",
+                                        {
+                                            "Ref": "S3Bucket"
+                                        },
+                                        "/*"
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "Bucket": {
+                    "Ref": "S3Bucket"
+                }
+            }
+        },
+        "LambdaCopyToS3": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "index.lambda_handler",
+                "Role": { "Fn::GetAtt" : ["RoleLambdaS3", "Arn"] },
+                "Code": {
+                    "ZipFile": { "Fn::Join": ["", [
+                        "import boto3\n",
+                        "import cfnresponse\n",
+                        "def lambda_handler(event, context):\n",
+                        "    s3 = boto3.client('s3')\n",
+                        "    for k in event['ResourceProperties']['keys']:\n",
+                        "        copy_source = {\n",
+                        "            'Bucket': event['ResourceProperties']['source_bucket'],\n",
+                        "            'Key': k\n",
+                        "        }\n",
+                        "        s3.copy(copy_source, event['ResourceProperties']['destination_bucket'], k)\n",
+                        "    responseData = {}\n",
+                        "    event['RequestId'] = ''\n",
+                        "    event['ResponseURL'] = ''\n",
+                        "    event['StackId'] = ''\n",
+                        "    event['LogicalResourceId'] = ''\n",
+                        "    cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)\n",
+                        "    return True"
+                    ]]}
+                },
+                "Runtime": "python2.7",
+                "Timeout": "20"
+            }
+        },
+        "LambdaCallCopyToS3": {
+            "Type": "Custom::LambdaCallout",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [ "LambdaCopyToS3", "Arn" ]
+                },
+                "source_bucket": "dozendigits",
+                "destination_bucket": {"Ref": "BucketNameParameter" },
+                "keys": ["error.html", "index.html", "dist/build.js", "dist/build.js.map"]
+            }
+        }
+    },
+    "Outputs": {
+        "WebsiteURL": {
+            "Value": { "Fn::GetAtt": ["S3Bucket", "WebsiteURL"] },
+            "Description": "URL for website hosted on S3"
+        }
+    }
+}

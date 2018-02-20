@@ -102,7 +102,7 @@ export default {
           username: this.username
         }
         var self = this;
-        // this.checking = true;
+        this.checking = true;
         axios.post(baseurl + '/answer', payload)
           .then(({data}) => {
             this.checking = false;

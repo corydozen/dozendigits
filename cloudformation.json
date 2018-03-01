@@ -1,10 +1,25 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
     "Parameters": {
-        "BucketNameParameter": {
+        "BucketName": {
             "Type": "String",
             "Default": "testbucket",
             "Description": "Enter the name for your bucket. If it is not available, the Template will fail"
+        },
+        "DynamoDBTableName": {
+            "Type": "String",
+            "Default": "Muliplication",
+            "Description": "Enter the name for your DynamoDB Table"
+        },
+        "ReadCapacityUnits": {
+            "Type": "String",
+            "Default": "1",
+            "Description": "Enter the amount of Read Capacity Units for your DynamoDB Table"
+        },
+        "WriteCapacityUnits": {
+            "Type": "String",
+            "Default": "1",
+            "Description": "Enter the amount of Write Capacity Units for your DynamoDB Table"
         }
     },
     "Resources": {
@@ -31,10 +46,79 @@
                 }]
             }
         },
+        "RoleLambdaDynamoDB": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [{ "Effect": "Allow", "Principal": {"Service": ["lambda.amazonaws.com"]}, "Action": ["sts:AssumeRole"] }]
+                },
+                "Path": "/",
+                "Policies": [{
+                    "PolicyName": "root",
+                    "PolicyDocument": {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Action": [
+                                    "dynamodb:*",
+                                    "dax:*",
+                                    "application-autoscaling:DeleteScalingPolicy",
+                                    "application-autoscaling:DeregisterScalableTarget",
+                                    "application-autoscaling:DescribeScalableTargets",
+                                    "application-autoscaling:DescribeScalingActivities",
+                                    "application-autoscaling:DescribeScalingPolicies",
+                                    "application-autoscaling:PutScalingPolicy",
+                                    "application-autoscaling:RegisterScalableTarget",
+                                    "cloudwatch:DeleteAlarms",
+                                    "cloudwatch:DescribeAlarmHistory",
+                                    "cloudwatch:DescribeAlarms",
+                                    "cloudwatch:DescribeAlarmsForMetric",
+                                    "cloudwatch:GetMetricStatistics",
+                                    "cloudwatch:ListMetrics",
+                                    "cloudwatch:PutMetricAlarm",
+                                    "datapipeline:ActivatePipeline",
+                                    "datapipeline:CreatePipeline",
+                                    "datapipeline:DeletePipeline",
+                                    "datapipeline:DescribeObjects",
+                                    "datapipeline:DescribePipelines",
+                                    "datapipeline:GetPipelineDefinition",
+                                    "datapipeline:ListPipelines",
+                                    "datapipeline:PutPipelineDefinition",
+                                    "datapipeline:QueryObjects",
+                                    "ec2:DescribeVpcs",
+                                    "ec2:DescribeSubnets",
+                                    "ec2:DescribeSecurityGroups",
+                                    "iam:GetRole",
+                                    "iam:ListRoles",
+                                    "sns:CreateTopic",
+                                    "sns:DeleteTopic",
+                                    "sns:ListSubscriptions",
+                                    "sns:ListSubscriptionsByTopic",
+                                    "sns:ListTopics",
+                                    "sns:Subscribe",
+                                    "sns:Unsubscribe",
+                                    "sns:SetTopicAttributes",
+                                    "lambda:CreateFunction",
+                                    "lambda:ListFunctions",
+                                    "lambda:ListEventSourceMappings",
+                                    "lambda:CreateEventSourceMapping",
+                                    "lambda:DeleteEventSourceMapping",
+                                    "lambda:GetFunctionConfiguration",
+                                    "lambda:DeleteFunction"
+                                ],
+                                "Resource": "*"
+                            }
+                        ]
+                    }
+                }]
+            }
+        },
         "S3Bucket": {
             "Type": "AWS::S3::Bucket",
             "Properties": {
-                "BucketName": {"Ref": "BucketNameParameter" },
+                "BucketName": {"Ref": "BucketName" },
                 "AccessControl": "PublicRead",
                 "WebsiteConfiguration": {
                     "IndexDocument":"index.html",
@@ -74,6 +158,37 @@
                 }
             }
         },
+        "DynamodbTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "Properties": {
+                "TableName": {"Ref": "DynamoDBTableName" },
+                "ProvisionedThroughput" : {
+                  "ReadCapacityUnits" : {"Ref": "ReadCapacityUnits" },
+                  "WriteCapacityUnits" : {"Ref": "WriteCapacityUnits" }
+                },
+                "AttributeDefinitions" : [
+                  {
+                    "AttributeName" : "userid",
+                    "AttributeType" : "S"
+                  },
+                  {
+                    "AttributeName" : "ts",
+                    "AttributeType" : "S"
+                  }
+                ],
+                "KeySchema" : [
+                  {
+                    "AttributeName" : "userid",
+                    "KeyType" : "HASH"
+                  },
+                  {
+                    "AttributeName" : "ts",
+                    "KeyType" : "RANGE"
+                  }
+                ]
+            }
+
+        },
         "LambdaCopyToS3": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
@@ -92,12 +207,9 @@
                         "        }\n",
                         "        s3.copy(copy_source, event['ResourceProperties']['destination_bucket'], k)\n",
                         "    responseData = {}\n",
-                        "    event['RequestId'] = ''\n",
-                        "    event['ResponseURL'] = ''\n",
-                        "    event['StackId'] = ''\n",
-                        "    event['LogicalResourceId'] = ''\n",
-                        "    cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)\n",
+                        "    cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, \"CustomResourcePhysicalID\")\n",
                         "    return True"
+
                     ]]}
                 },
                 "Runtime": "python2.7",
@@ -111,8 +223,170 @@
                     "Fn::GetAtt": [ "LambdaCopyToS3", "Arn" ]
                 },
                 "source_bucket": "dozendigits",
-                "destination_bucket": { "Ref": "BucketNameParameter" },
+                "destination_bucket": { "Ref": "BucketName" },
                 "keys": ["error.html", "index.html", "dist/build.js", "dist/build.js.map"]
+            }
+        },
+        "LambdaGetQuestion": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "index.lambda_handler",
+                "Role": { "Fn::GetAtt": ["RoleLambdaDynamoDB", "Arn"] },
+                "Code": {
+                    "ZipFile": { "Fn::Join": ["", [
+                        "import random\n",
+                        "import json\n",
+                        "def lambda_handler(event, context):\n",
+                        "    first_upper_bound = 50\n",
+                        "    second_upper_bound = 20\n",
+                        "    if event[\"queryStringParameters\"][\"difficulty\"] == 'low':\n",
+                        "        first_upper_bound = 10\n",
+                        "        second_upper_bound = 10\n",
+                        "    elif event[\"queryStringParameters\"][\"difficulty\"] == 'medium':\n",
+                        "        first_upper_bound = 50\n",
+                        "        second_upper_bound = 11\n",
+                        "    Question = {\n",
+                        "        'first_number': random.randint(2,first_upper_bound),\n",
+                        "        'second_number': random.randint(2,second_upper_bound)\n",
+                        "    }\n",
+                        "    return {\n",
+                        "        'statusCode': 200,\n",
+                        "        \"headers\": {\n",
+                        "            \"Access-Control-Allow-Origin\" : \"*\",\n",
+                        "            \"Access-Control-Allow-Credentials\" : True\n",
+                        "        },\n",
+                        "        \"body\": json.dumps(Question),\n",
+                        "        \"isBase64Encoded\": False\n",
+                        "    }"
+                    ]]}
+                },
+                "Runtime": "python2.7",
+                "Timeout": "20"
+            }
+        },
+        "LambdaGetHistory": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "index.lambda_handler",
+                "Role": { "Fn::GetAtt": ["RoleLambdaDynamoDB", "Arn"] },
+                "Code": {
+                    "ZipFile": { "Fn::Join": ["", [
+                        "import json\n",
+                        "import os\n",
+                        "import decimal\n",
+                        "import boto3\n",
+                        "from boto3.dynamodb.conditions import Key, Attr\n",
+                        "def lambda_handler(event, context):\n",
+                        "    dynamodb = boto3.resource('dynamodb')\n",
+                        "    table = dynamodb.Table(os.environ['DB_TABLE_NAME'])\n",
+                        "    Response = table.query(\n",
+                        "        ProjectionExpression=\"ts, answer, correct, first_number, second_number\",\n",
+                        "        KeyConditionExpression=Key('userid').eq(event[\"queryStringParameters\"][\"userid\"]),\n",
+                        "        Limit=10,\n",
+                        "        ScanIndexForward=False\n",
+                        "        )\n",
+                        "    return {\n",
+                        "        'statusCode': 200,\n",
+                        "        \"headers\": {\n",
+                        "            \"Access-Control-Allow-Origin\" : \"*\",\n",
+                        "            \"Access-Control-Allow-Credentials\" : True\n",
+                        "        },\n",
+                        "        \"body\": json.dumps(Response[\"Items\"], cls=DecimalEncoder),\n",
+                        "        \"isBase64Encoded\": False\n",
+                        "    }\n",
+                        "class DecimalEncoder(json.JSONEncoder):\n",
+                        "    def default(self, o):\n",
+                        "        if isinstance(o, decimal.Decimal):\n",
+                        "            return float(o)\n",
+                        "        return super(DecimalEncoder, self).default(o)"
+                    ]]}
+                },
+                "Runtime": "python2.7",
+                "Timeout": "20"
+            }
+        },
+        "LambdaPostAnswer": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "index.lambda_handler",
+                "Role": { "Fn::GetAtt": ["RoleLambdaDynamoDB", "Arn"] },
+                "Code": {
+                    "ZipFile": { "Fn::Join": ["", [
+                        "import boto3\n",
+                        "import os\n",
+                        "import uuid\n",
+                        "import time\n",
+                        "import json\n",
+                        "import sys\n",
+                        "def lambda_handler(event, context):\n",
+                        "    try:\n",
+                        "        first_number = json.loads(event['body'])['first_number']\n",
+                        "        second_number = json.loads(event['body'])['second_number']\n",
+                        "        user_id = str(json.loads(event['body'])['user_id'])\n",
+                        "        if user_id is None:\n",
+                        "            user_id = '1234'\n",
+                        "        username = str(json.loads(event['body'])['username'])\n",
+                        "        if username is None:\n",
+                        "            username = '1234'\n",
+                        "        answer = json.loads(event['body'])['answer']\n",
+                        "        difficulty = json.loads(event['body'])['difficulty']\n",
+                        "        dynamodb = boto3.resource('dynamodb')\n",
+                        "        table = dynamodb.Table(os.environ['DB_TABLE_NAME'])\n",
+                        "        ts = time.gmtime()\n",
+                        "        correct = int(first_number) * int(second_number) == int(answer)\n",
+                        "        table.put_item(\n",
+                        "            Item={\n",
+                        "                'userid': user_id,\n",
+                        "                'username': username,\n",
+                        "                'ts': time.strftime(\"%Y-%m-%d %H:%M:%S\", ts),\n",
+                        "                'first_number': first_number,\n",
+                        "                'second_number': second_number,\n",
+                        "                'answer': answer,\n",
+                        "                'correct': correct,\n",
+                        "                'difficulty': difficulty\n",
+                        "            }\n",
+                        "        )\n",
+                        "        Answer = {\n",
+                        "            'correct': correct\n",
+                        "        }\n",
+                        "        if correct:\n",
+                        "            payload = {\n",
+                        "                'queryStringParameters': {\n",
+                        "                    'difficulty': difficulty\n",
+                        "                }\n",
+                        "            }\n",
+                        "            invoke_response = boto3.client('lambda').invoke(FunctionName=os.environ[\"GET_QUESTION_FUNCTION_NAME\"],InvocationType=\"RequestResponse\",Payload=json.dumps(payload))\n",
+                        "            next_question = json.loads(invoke_response['Payload'].read())\n",
+                        "            Answer[\"next_question\"] = json.loads(next_question[\"body\"])\n",
+                        "        return {\n",
+                        "            'statusCode': 200,\n",
+                        "            \"headers\": {\n",
+                        "                \"Access-Control-Allow-Origin\" : \"*\",\n",
+                        "                \"Access-Control-Allow-Credentials\" : True\n",
+                        "            },\n",
+                        "            \"body\": json.dumps(Answer),\n",
+                        "            \"isBase64Encoded\": False\n",
+                        "        }\n",
+                        "    except Exception, e:\n",
+                        "        return {\n",
+                        "            'statusCode': 200,\n",
+                        "            \"headers\": {\n",
+                        "                \"Access-Control-Allow-Origin\" : \"*\",\n",
+                        "                \"Access-Control-Allow-Credentials\" : True\n",
+                        "            },\n",
+                        "            \"body\": \"Error \" + str(e),\n",
+                        "            \"isBase64Encoded\": False\n",
+                        "        }"
+                    ]]}
+                },
+                "Environment": {
+                    "Variables": {
+                        "GET_QUESTION_FUNCTION_NAME": { "Fn::Select": ["6", { "Fn::Split": [":", { "Fn::GetAtt": ["LambdaGetQuestion", "Arn"]}]}]},
+                        "DB_TABLE_NAME": {"Ref": "DynamoDBTableName" }
+                    }
+                },
+                "Runtime": "python2.7",
+                "Timeout": "20"
             }
         }
     },
